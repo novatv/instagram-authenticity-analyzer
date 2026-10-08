@@ -10,6 +10,13 @@ import { fmtInt } from "@/utils/format";
 const TABS = ["Overview", "Audience", "Engagement", "Posts", "Comments", "Signals", "Methodology"] as const;
 type Tab = (typeof TABS)[number];
 
+function screeningLabel(q: number): string {
+  if (q >= 80) return "No fingerprints of bought followers or likes in the engagement";
+  if (q >= 60) return "Mostly consistent engagement, with some anomalies worth a closer look";
+  if (q >= 40) return "Engagement pattern inconsistent with an organic audience";
+  return "Strong fingerprints of inflated followers or purchased likes";
+}
+
 export function ProfileDashboard({ r }: { r: ProfileAnalysisResult }) {
   const [tab, setTab] = useState<Tab>("Overview");
   const a = r.audience;
@@ -41,11 +48,18 @@ export function ProfileDashboard({ r }: { r: ProfileAnalysisResult }) {
 
       {tab === "Overview" && (
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card title="Organic score (estimated)" className="lg:col-span-1">
-            <ScoreRing value={r.score} label="Overall authenticity" sub={organicLabel} />
-            {r.score === undefined && a.status !== "ok" && <p className="mt-2 text-xs text-warn">INSUFFICIENT DATA — an overall score requires a follower sample. See the Audience tab for what is missing.</p>}
-            <p className="mt-3 text-xs text-muted">Weighted combination of audience authenticity (60%) and engagement quality (40%) over the components with sufficient data.</p>
-          </Card>
+          {r.score === undefined && e.status === "ok" ? (
+            <Card title="Screening score (engagement only)" className="lg:col-span-1">
+              <ScoreRing value={e.qualityScore.value} label="Engagement vs. accounts of the same size" sub={screeningLabel(e.qualityScore.value ?? 0)} />
+              <p className="mt-3 text-xs text-muted">Based only on public counts (followers, likes, comments). No follower sample: the share of fake followers cannot be estimated, so this is a screening, not a full audit.</p>
+            </Card>
+          ) : (
+            <Card title="Organic score (estimated)" className="lg:col-span-1">
+              <ScoreRing value={r.score} label="Overall authenticity" sub={organicLabel} />
+              {r.score === undefined && a.status !== "ok" && <p className="mt-2 text-xs text-warn">INSUFFICIENT DATA — an overall score requires a follower sample. See the Audience tab for what is missing.</p>}
+              <p className="mt-3 text-xs text-muted">Weighted combination of audience authenticity (60%) and engagement quality (40%) over the components with sufficient data.</p>
+            </Card>
+          )}
           <Card title="Bot / Fake follower score" className="lg:col-span-1">
             <ScoreRing value={a.botFakeScore.value} label="0 = very authentic · 100 = extremely suspicious" sub={a.status === "ok" ? `Audience authenticity ${a.authenticityScore.value}/100` : "Insufficient data"} invert />
           </Card>

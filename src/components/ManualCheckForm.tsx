@@ -5,15 +5,23 @@ import type { ApiEnvelope, ApiError, ProfileAnalysisResult } from "@/types/resul
 import { ProfileDashboard } from "./ProfileDashboard";
 import { InsufficientData } from "./ui";
 
-/** "1240" · "1,240" · "1.240" · "12.4K" · "1,2M" → integer. With a K/M suffix the separator is a decimal point; without it, separators are thousands. */
-function num(v: string): number | undefined {
-  const s = v.trim().toLowerCase().replace(/\s/g, "");
+/**
+ * "1240" · "1,240" · "1.240" · "12.4K" · "1,2M" · "20,7 mil" · "11.494 Me gusta" → integer.
+ * With a K / mil / M suffix the separator is a decimal point; without it, separators are thousands.
+ * Trailing words (likes, Me gusta, seguidores, comentarios…) are ignored.
+ */
+export function num(v: string): number | undefined {
+  const s = v
+    .trim()
+    .toLowerCase()
+    .replace(/\b(me gusta|likes?|comentarios?|comments?|seguidores|followers|seguidos|following|posts?|publicaciones|views?|visualizaciones|reproducciones)\b/g, "")
+    .replace(/\s+/g, "");
   if (!s) return undefined;
-  const m = s.match(/^([\d.,]+)([km])?$/);
+  const m = s.match(/^([\d.,]+)(k|mil|m|mill|millones|mn)?$/);
   if (!m || !/\d/.test(m[1] ?? "")) return undefined;
   const digits = m[1] as string;
   const suffix = m[2];
-  const mult = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1;
+  const mult = suffix === "k" || suffix === "mil" ? 1_000 : suffix ? 1_000_000 : 1;
   const base = suffix ? Number(digits.replace(",", ".")) : Number(digits.replace(/[.,]/g, ""));
   if (!Number.isFinite(base)) return undefined;
   return Math.round(base * mult);
@@ -26,7 +34,13 @@ export function parsePostLines(text: string): { rows: { likes: number; comments?
   text.split(/\r?\n/).forEach((line, i) => {
     const t = line.trim();
     if (!t) return;
-    const parts = t.split(/[;\t|]|,\s+|\s+/).map((p) => p.trim()).filter(Boolean);
+    const parts = t
+      .toLowerCase()
+      .replace(/(\d)\s+(mil|k|m)\b/g, "$1$2")
+      .replace(/\s*(me gusta|likes?|comentarios?|comments?)\b/g, "")
+      .split(/[;\t|]|,\s+|\s+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
     const likes = num(parts[0] ?? "");
     if (likes === undefined) {
       bad.push(i + 1);

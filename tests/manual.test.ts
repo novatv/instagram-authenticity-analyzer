@@ -2,9 +2,18 @@ import { describe, it, expect } from "vitest";
 import { ManualProvider } from "@/providers/ManualProvider";
 import { analyzeProfile } from "@/analysis/analyzeProfile";
 import { DEFAULT_SUSPICION_WEIGHTS } from "@/config/weights";
-import { parsePostLines } from "@/components/ManualCheckForm";
+import { parsePostLines, num } from "@/components/ManualCheckForm";
 
 describe("manual quick check", () => {
+  it("parses Spanish Instagram formats", () => {
+    expect(num("20,7 mil")).toBe(20_700);
+    expect(num("1.731")).toBe(1731);
+    expect(num("11.494 Me gusta")).toBe(11_494);
+    expect(num("26 mil")).toBe(26_000);
+    expect(num("1,2 M")).toBe(1_200_000);
+    expect(num("894 seguidores")).toBe(894);
+    expect(parsePostLines("11.494 Me gusta, 26 comentarios\n26 mil 68").rows).toEqual([{ likes: 11_494, comments: 26, views: undefined }, { likes: 26_000, comments: 68, views: undefined }]);
+  });
   it("parses K/M formats and comma-separated lines", () => {
     const { rows, bad } = parsePostLines("1240, 38\n1.1K 41\n2,3M;95\nabc\n");
     expect(rows).toEqual([{ likes: 1240, comments: 38, views: undefined }, { likes: 1100, comments: 41, views: undefined }, { likes: 2_300_000, comments: 95, views: undefined }]);

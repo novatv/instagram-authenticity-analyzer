@@ -8,6 +8,7 @@ import { parseAnalyzeInput } from "@/utils/parseInput";
 import { ProfileDashboard } from "./ProfileDashboard";
 import { PostDashboard } from "./PostDashboard";
 import { InsufficientData } from "./ui";
+import { ManualCheckForm } from "./ManualCheckForm";
 
 type Result = ProfileAnalysisResult | PostAnalysisResult;
 
@@ -85,12 +86,18 @@ export function AnalyzeForm({ demoUsernames }: { demoUsernames: string[] }) {
         </div>
       </form>
 
-      {error && (
-        <div className="space-y-3">
-          <InsufficientData title="INSUFFICIENT DATA" missing={[error.details?.reason ?? error.message, ...(error.details?.hint ? [error.details.hint] : [])]} hint="The analysis could not run because the active data source could not supply the required data:" />
-          <Link href={`/check?u=${encodeURIComponent(value.replace(/^@/, ""))}`} className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90">Verify this account now with its public numbers (Screening check) →</Link>
+      {error && error.details?.reason && parseAnalyzeInput(value).kind === "profile" ? (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-accent/40 bg-accent/5 p-4 text-sm">
+            <b className="text-accent">Screening check</b> — the active data source has no data for this account, so enter its public numbers below. Open{" "}
+            <a href={`https://www.instagram.com/${encodeURIComponent(value.replace(/^@/, ""))}/`} target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">instagram.com/{value.replace(/^@/, "")} ↗</a>, copy followers, following and the likes/comments of the last 8–12 posts, paste them and press ANALYZE.
+            <div className="mt-1 text-xs text-muted">{error.details.reason}</div>
+          </div>
+          <ManualCheckForm key={value} initialUsername={`@${value.replace(/^@/, "")}`} />
         </div>
-      )}
+      ) : error ? (
+        <InsufficientData title="INSUFFICIENT DATA" missing={[error.details?.reason ?? error.message, ...(error.details?.hint ? [error.details.hint] : [])]} hint="The analysis could not run because the active data source could not supply the required data:" />
+      ) : null}
 
       {result?.kind === "profile" && <ProfileDashboard r={result} />}
       {result?.kind === "post" && <PostDashboard r={result} />}
