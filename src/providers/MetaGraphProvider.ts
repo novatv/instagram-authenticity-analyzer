@@ -50,7 +50,7 @@ interface GraphMedia {
  * and a long-lived user/page access token.
  */
 export class MetaGraphProvider implements InstagramDataProvider {
-  readonly name = "Meta Graph API (Business Discovery)";
+  readonly name = "Meta Graph API (Business Discovery + oEmbed)";
   readonly isDemo = false;
   private readonly cfg: Required<Omit<MetaGraphConfig, "fetchImpl">> & { fetchImpl: typeof fetch };
 
@@ -109,13 +109,38 @@ export class MetaGraphProvider implements InstagramDataProvider {
     return available(media.map((m) => mapMedia(m, d.data.username)), SRC);
   }
 
+  /** Resolve the owner of a public post/reel URL via the official oEmbed endpoint. */
+  private async resolveOwner(url: string): Promise<Availability<string>> {
+    const u = new URL(`https://graph.facebook.com/${this.cfg.apiVersion}/instagram_oembed`);
+    u.searchParams.set("url", url);
+    u.searchParams.set("fields", "author_name");
+    u.searchParams.set("access_token", this.cfg.accessToken);
+    try {
+      const res = await this.cfg.fetchImpl(u.toString(), { headers: { Accept: "application/json" } });
+      const json = (await res.json()) as { author_name?: string; error?: { message?: string } };
+      if (!res.ok || json.error || !json.author_name) return unavailable(`Could not resolve the post owner via oEmbed: ${json.error?.message ?? `HTTP ${res.status}`}`, SRC);
+      return available(json.author_name, SRC);
+    } catch (e) {
+      return unavailable(`Network error contacting Meta oEmbed: ${(e as Error).message}`, SRC);
+    }
+  }
+
+  /**
+   * Paste a post/reel link → owner via oEmbed → owner's recent media via Business
+   * Discovery → the media whose permalink matches the shortcode.
+   */
   async getPost(ref: { shortcode?: string; id?: string; url?: string }): Promise<Availability<PostData>> {
-    // The Graph API does not resolve arbitrary shortcodes to media you do not own.
-    // Business Discovery can only enumerate recent media per username; callers
-    // should pass the owner username in `url` (we parse it) when possible.
     const code = ref.shortcode ?? ref.id;
     if (!code) return unavailable("No shortcode supplied", SRC);
-    return unavailable(`Meta Graph API cannot resolve a public post by shortcode (${code}) unless it belongs to a connected account. Analyze the owner profile instead, or import engagement data.`, SRC);
+    const url = ref.url || `https://www.instagram.com/p/${code}/`;
+    const owner = await this.resolveOwner(url);
+    if (owner.status === "unavailable") return owner;
+    const d = await this.discovery(owner.data, 50);
+    if (d.status === "unavailable") return d;
+    const media = (d.data.media?.data ?? []).map((m) => mapMedia(m, d.data.username));
+    const post = media.find((m) => m.shortcode === code);
+    if (!post) return unavailable(`Post ${code} belongs to @${d.data.username} but is not among its 50 most recent media exposed by the Graph API.`, SRC);
+    return available(post, SRC);
   }
 
   async getFollowerSample(): Promise<Availability<FollowerSample>> {

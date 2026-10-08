@@ -94,6 +94,19 @@ describe("MetaGraphProvider", () => {
     expect((await p.getLikers()).status).toBe("unavailable");
     expect((await p.getProfile("bad name")).status).toBe("unavailable");
   });
+  it("resolves a pasted post link through oEmbed + business discovery", async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u.includes("instagram_oembed")) return new Response(JSON.stringify({ author_name: "brand" }), { status: 200 });
+      return new Response(JSON.stringify({ business_discovery: { username: "brand", followers_count: 1000, media: { data: [{ id: "9", permalink: "https://www.instagram.com/reel/ABC/", like_count: 50, comments_count: 4 }] } } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const p = new MetaGraphProvider({ accessToken: "t", businessAccountId: "1", fetchImpl });
+    const r = await p.getPost({ shortcode: "ABC", url: "https://www.instagram.com/reel/ABC/" });
+    expect(r.status === "available" && r.data.ownerUsername).toBe("brand");
+    expect(r.status === "available" && r.data.likesCount).toBe(50);
+    const miss = await p.getPost({ shortcode: "ZZZ", url: "https://www.instagram.com/p/ZZZ/" });
+    expect(miss.status === "unavailable" && miss.reason).toContain("not among");
+  });
   it("surfaces API errors without retrying", async () => {
     const fetchImpl = (async () => new Response(JSON.stringify({ error: { message: "rate", code: 4 } }), { status: 400 })) as unknown as typeof fetch;
     const p = new MetaGraphProvider({ accessToken: "t", businessAccountId: "1", fetchImpl });
